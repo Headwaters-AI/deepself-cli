@@ -1,0 +1,23 @@
+# Source files
+src/
+tests/
+examples/
+
+# Config files
+tsconfig.json
+vitest.config.ts
+vitest.integration.config.ts
+.gitignore
+
+# Documentation (except README)
+DOCS.md
+CLI_SPEC.md
+
+# Development
+*.log
+.DS_Store
+coverage/
+.vscode/
+.idea/
+
+# Keep only dist in published package

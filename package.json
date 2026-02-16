@@ -1,0 +1,52 @@
+{
+  "name": "deepself-cli",
+  "version": "1.0.0",
+  "description": "Official CLI for interacting with the Deepself API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "deepself": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "deepself",
+    "ai",
+    "cli",
+    "chat",
+    "training"
+  ],
+  "author": "Deepself",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deepself-ai/deepself-cli.git"
+  },
+  "homepage": "https://github.com/deepself-ai/deepself-cli#readme",
+  "bugs": {
+    "url": "https://github.com/deepself-ai/deepself-cli/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.3",
+    "commander": "^12.0.0",
+    "inquirer": "^9.2.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  }
+}
