@@ -1,0 +1,2 @@
+# deepself-cli
+Deepself CLI
