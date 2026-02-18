@@ -11,11 +11,13 @@ import {
   ChatCompletionRequest,
   ChatCompletionResponse,
   ChatMessage,
+  SupportedModelsResponse,
 } from '../api/types.js';
 import { info } from '../utils/output.js';
 
 /**
  * Chat command (interactive and single-shot)
+ * Supports username@model format for specifying LLM provider
  */
 class ChatCommand extends BaseCommand {
   private conversationHistory: ChatMessage[] = [];
@@ -24,44 +26,122 @@ class ChatCommand extends BaseCommand {
     super('chat', options);
   }
 
+  /**
+   * Parse model format and determine provider
+   * Returns { modelFormat, provider } where:
+   * - modelFormat is the full "username@model" or just "username"
+   * - provider is "anthropic", "openai", or undefined (for default)
+   */
+  private async parseModelFormat(modelInput: string): Promise<{ modelFormat: string; provider?: string }> {
+    // Check if model includes @ symbol
+    if (!modelInput.includes('@')) {
+      // No @ means use default /v1/chat/completions endpoint
+      return { modelFormat: modelInput, provider: undefined };
+    }
+
+    // Split username@model
+    const [, modelId] = modelInput.split('@');
+
+    // Fetch supported models to determine provider
+    const client = this.getClient(); // Public endpoint
+    const supportedModels = await client.get<SupportedModelsResponse>(API_ENDPOINTS.MODELS_SUPPORTED);
+
+    // Find the model
+    const model = supportedModels.models.find((m) => m.model === modelId);
+
+    if (!model) {
+      throw new Error(
+        `Unsupported model: ${modelId}. Run "deepself models supported" to see available models.`
+      );
+    }
+
+    return {
+      modelFormat: modelInput,
+      provider: model.provider,
+    };
+  }
+
+  /**
+   * Send a chat message using the appropriate endpoint based on provider
+   */
+  private async sendMessage(
+    client: any,
+    messages: ChatMessage[],
+    modelFormat: string,
+    provider?: string
+  ): Promise<any> {
+    // Route to appropriate endpoint based on provider
+    if (provider === 'anthropic') {
+      // Use /v1/messages (Anthropic proxy)
+      const response = await client.post(API_ENDPOINTS.MESSAGES, {
+        model: modelFormat,
+        max_tokens: 4096,
+        messages: messages,
+      });
+      return response;
+    } else {
+      // Use /v1/chat/completions (default, works for OpenAI and xAI)
+      const chatRequest: ChatCompletionRequest = {
+        model: modelFormat,
+        messages: messages,
+      };
+
+      const response = await client.post(
+        API_ENDPOINTS.CHAT_COMPLETIONS,
+        chatRequest
+      );
+
+      return response as ChatCompletionResponse;
+    }
+  }
+
   async execute(
     modelId: string,
     cmdOptions: { message?: string }
   ): Promise<void> {
     const client = this.requireAuth();
 
+    // Parse model format and determine provider
+    const { modelFormat, provider } = await this.parseModelFormat(modelId);
+
     // Single-shot mode (with --message)
     if (cmdOptions.message) {
-      const chatRequest: ChatCompletionRequest = {
-        model: modelId,
-        messages: [
-          {
-            role: 'user',
-            content: cmdOptions.message,
-          },
-        ],
-      };
+      const messages: ChatMessage[] = [
+        {
+          role: 'user',
+          content: cmdOptions.message,
+        },
+      ];
 
-      const response = await client.post<ChatCompletionResponse>(
-        API_ENDPOINTS.CHAT_COMPLETIONS,
-        chatRequest
-      );
+      const response = await this.sendMessage(client, messages, modelFormat, provider);
 
-      const assistantMessage = response.choices[0].message;
-
-      this.output({
-        model: response.model,
-        message: assistantMessage.content,
-        finish_reason: response.choices[0].finish_reason,
-        usage: response.usage,
-      });
+      // Handle response based on provider
+      if (provider === 'anthropic') {
+        // Anthropic Messages API response format
+        const content = response.content[0]?.text || '';
+        this.output({
+          model: response.model,
+          message: content,
+          finish_reason: response.stop_reason,
+          usage: response.usage,
+        });
+      } else {
+        // OpenAI format
+        const assistantMessage = response.choices[0].message;
+        this.output({
+          model: response.model,
+          message: assistantMessage.content,
+          finish_reason: response.choices[0].finish_reason,
+          usage: response.usage,
+        });
+      }
 
       return;
     }
 
     // Interactive mode
     if (!this.options.quiet) {
-      info(`Chat with ${modelId}`);
+      info(`Chat with ${modelFormat}${provider ? ` (${provider})` : ''}`);
       info('Type your messages below. Type "exit" or "quit" to end the chat.');
       console.log();
     }
@@ -98,20 +178,30 @@ class ChatCommand extends BaseCommand {
 
       // Send message to API
       try {
-        const chatRequest: ChatCompletionRequest = {
-          model: modelId,
-          messages: this.conversationHistory,
-        };
-
-        const chatResponse = await client.post<ChatCompletionResponse>(
-          API_ENDPOINTS.CHAT_COMPLETIONS,
-          chatRequest
+        const response = await this.sendMessage(
+          client,
+          this.conversationHistory,
+          modelFormat,
+          provider
         );
 
-        const assistantMessage = chatResponse.choices[0].message;
-        this.conversationHistory.push(assistantMessage);
+        // Handle response based on provider
+        let assistantContent: string;
+        if (provider === 'anthropic') {
+          // Anthropic Messages API response format
+          assistantContent = response.content[0]?.text || '';
+          this.conversationHistory.push({
+            role: 'assistant',
+            content: assistantContent,
+          });
+        } else {
+          // OpenAI format
+          const assistantMessage = response.choices[0].message;
+          this.conversationHistory.push(assistantMessage);
+          assistantContent = assistantMessage.content;
+        }
 
-        console.log(chalk.green('Assistant:'), assistantMessage.content);
+        console.log(chalk.green('Assistant:'), assistantContent);
         console.log();
         rl.prompt();
       } catch (error) {
@@ -151,7 +241,7 @@ export function registerChatCommands(program: Command): void {
   const chatCmd = program
     .command('chat')
     .description('Chat with an AI model')
-    .argument('<model-id>', 'Model ID to chat with')
+    .argument('<model>', 'Model to chat with (username or username@model-id, e.g., yoda@gpt-4o-mini)')
     .option('--message <text>', 'Single message to send (non-interactive)')
     .action(async (modelId, options) => {
       const cmd = new ChatCommand(options);

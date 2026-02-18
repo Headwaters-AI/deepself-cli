@@ -19,11 +19,23 @@ export const API_ENDPOINTS = {
 
   // Chat
   CHAT_COMPLETIONS: '/v1/chat/completions',
+  MESSAGES: '/v1/messages',  // Anthropic proxy
+  RESPONSES: '/v1/responses',  // OpenAI Responses API proxy
 
   // API Keys (JWT required)
   API_KEYS_LIST: '/v1/auth/api-keys',
   API_KEYS_CREATE: '/v1/auth/api-keys',
   API_KEYS_REVOKE: (keyId: string) => `/v1/auth/api-keys/${keyId}`,
+
+  // Billing
+  BILLING_BALANCE: '/v1/billing/balance',
+  BILLING_USAGE: '/v1/billing/usage',
+  BILLING_SUBSCRIPTION: '/v1/billing/subscription',
+  BILLING_CHECKOUT: '/v1/billing/checkout',
+  BILLING_CANCEL: '/v1/billing/subscription/cancel',
+
+  // Models - Supported
+  MODELS_SUPPORTED: '/v1/models/supported',
 } as const;
 
 export const DEFAULT_API_BASE_URL = 'https://api.deepself.me';

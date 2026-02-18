@@ -10,6 +10,7 @@ import { registerAuthCommands } from './commands/auth.js';
 import { registerModelsCommands } from './commands/models.js';
 import { registerTrainCommands } from './commands/train.js';
 import { registerChatCommands } from './commands/chat.js';
+import { registerBillingCommands } from './commands/billing.js';
 import {
   AuthenticationError,
   NotFoundError,
@@ -31,6 +32,7 @@ registerAuthCommands(program);
 registerModelsCommands(program);
 registerTrainCommands(program);
 registerChatCommands(program);
+registerBillingCommands(program);
 
 // Global error handler
 async function main() {

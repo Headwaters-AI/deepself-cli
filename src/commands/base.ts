@@ -46,6 +46,20 @@ export abstract class BaseCommand {
   }
 
   /**
+   * Get API client without requiring authentication
+   * For public endpoints
+   */
+  protected getClient(): ApiClient {
+    const apiKey = isAuthenticated() ? getApiKey() : undefined;
+    const baseURL = getBaseURL();
+
+    return new ApiClient({
+      apiKey,
+      baseURL,
+    });
+  }
+
+  /**
    * Output data in JSON or human-readable format
    */
   protected output(data: any): void {

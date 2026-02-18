@@ -6,7 +6,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { BaseCommand, addGlobalOptions, GlobalOptions } from './base.js';
 import { API_ENDPOINTS } from '../api/endpoints.js';
-import { Model, ModelsListResponse, CreateModelRequest, UpdateModelRequest } from '../api/types.js';
+import { Model, ModelsListResponse, CreateModelRequest, UpdateModelRequest, SupportedModelsResponse } from '../api/types.js';
 import { createTable, createKeyValueTable } from '../utils/table.js';
 import { formatDate, formatFacts, formatTools, parseFact } from '../utils/formatting.js';
 import { success, info } from '../utils/output.js';
@@ -93,10 +93,16 @@ class CreateModelCommand extends BaseCommand {
     username: string,
     cmdOptions: { name?: string; tools?: string[] }
   ): Promise<void> {
-    // Validate username format
-    if (!username.startsWith('deep-')) {
+    // Validate username format (lowercase letters, dashes, numbers, max 32 chars)
+    if (!/^[a-z0-9-]+$/.test(username)) {
       throw new UsageError(
-        'Username must start with "deep-". Example: deep-mybot'
+        'Username must contain only lowercase letters, dashes, and numbers'
+      );
+    }
+
+    if (username.length > 32) {
+      throw new UsageError(
+        'Username must be 32 characters or fewer'
       );
     }
 
@@ -105,7 +111,7 @@ class CreateModelCommand extends BaseCommand {
     const request: CreateModelRequest = {
       username,
       name: cmdOptions.name,
-      tools: cmdOptions.tools,
+      default_tools: cmdOptions.tools,
     };
 
     const model = await client.post<Model>(
@@ -157,15 +163,15 @@ class UpdateModelCommand extends BaseCommand {
     }
 
     if (cmdOptions.addFact && cmdOptions.addFact.length > 0) {
-      request.facts = {};
+      request.basic_facts = {};
       cmdOptions.addFact.forEach((factString) => {
         const { key, value } = parseFact(factString);
-        request.facts![key] = value;
+        request.basic_facts![key] = value;
       });
     }
 
     if (cmdOptions.tools) {
-      request.tools = cmdOptions.tools;
+      request.default_tools = cmdOptions.tools;
     }
 
     // Check if there are any updates
@@ -234,6 +240,41 @@ class DeleteModelCommand extends BaseCommand {
 }
 
 /**
+ * List supported LLM models command
+ */
+class SupportedModelsCommand extends BaseCommand {
+  constructor(options: GlobalOptions) {
+    super('models.supported', options);
+  }
+
+  async execute(): Promise<void> {
+    const client = this.getClient(); // Public endpoint - no auth required
+    const response = await client.get<SupportedModelsResponse>(API_ENDPOINTS.MODELS_SUPPORTED);
+    this.output(response.models);
+  }
+
+  protected humanOutput(models: any[]): void {
+    if (models.length === 0) {
+      info('No supported models found');
+      return;
+    }
+
+    const table = createTable(['Model ID', 'Provider']);
+
+    models.forEach((model) => {
+      table.push([model.model, model.provider]);
+    });
+
+    console.log(table.toString());
+    console.log();
+    info(`Total: ${models.length} supported model(s)`);
+    console.log();
+    console.log(chalk.gray('Use these model IDs with the username@model format:'));
+    console.log(chalk.gray('  Example: deepself chat yoda@gpt-4o-mini'));
+  }
+}
+
+/**
  * Register model commands
  */
 export function registerModelsCommands(program: Command): void {
@@ -264,7 +305,7 @@ export function registerModelsCommands(program: Command): void {
   const createCmd = models
     .command('create')
     .description('Create a new model')
-    .argument('<username>', 'Username for the model (must start with "deep-")')
+    .argument('<username>', 'Username for the model (lowercase letters, dashes, numbers, max 32 chars)')
     .option('--name <name>', 'Display name for the model')
     .option('--tools <tools...>', 'Tools to enable for the model')
     .action(async (username, options) => {
@@ -298,4 +339,14 @@ export function registerModelsCommands(program: Command): void {
       await cmd.execute(modelId, options);
     });
   addGlobalOptions(deleteCmd);
+
+  // Supported models
+  const supportedCmd = models
+    .command('supported')
+    .description('List available LLM models for username@model syntax')
+    .action(async (options) => {
+      const cmd = new SupportedModelsCommand(options);
+      await cmd.execute();
+    });
+  addGlobalOptions(supportedCmd);
 }
